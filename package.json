@@ -9,8 +9,10 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20250425.0",
 		"typescript": "^5.5.2",
 		"wrangler": "^4.13.2"
+	},
+	"dependencies": {
+		"fast-xml-parser": "^5.2.1"
 	}
 }

@@ -1,0 +1,17 @@
+name = "swarm-fm-uptime-worker"
+main = "src/index.ts"
+compatibility_date = "2025-04-25"
+
+# Durable Objects
+[durable_objects]
+bindings = [
+  { name = "LIVE_DO", class_name = "LiveStatusDO" }
+]
+
+[triggers]
+# Define cron schedules for triggering the worker
+crons = ["0 * * * *"] # Example: Runs at the start of every hour
+
+[[migrations]]
+tag = "v1"
+new_classes = [ "LiveStatusDO" ]
