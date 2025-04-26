@@ -14,4 +14,4 @@ crons = ["0 * * * *"] # Example: Runs at the start of every hour
 
 [[migrations]]
 tag = "v1"
-new_classes = [ "LiveStatusDO" ]
+new_sqlite_classes = [ "LiveStatusDO" ]
