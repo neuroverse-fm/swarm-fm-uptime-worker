@@ -171,30 +171,48 @@ export default {
     return stub.fetch(request);
   },
 
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // Poll YouTube’s Search API every minute
+  async scheduled(
+    controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    // 1) Grab the DO stub
+    const id   = env.LIVE_DO.idFromName("singleton");
+    const stub = env.LIVE_DO.get(id);
+
+    // 2) Check current live state
+    const statusRes = await stub.fetch("https://dummy/status");
+    const { videoId } = (await statusRes.json()) as { videoId: string | null };
+
+    // 3) If we're NOT live (videoId === null), skip polling
+    if (videoId === null) {
+      return;
+    }
+
+    // 4) Otherwise, poll YouTube to see if the live has ended
     const url = new URL("https://www.googleapis.com/youtube/v3/search");
     url.search = new URLSearchParams({
-      part:      "id",
-      channelId: "UC2I6ta1bWX7DnEuYNvHiptQ",
-      eventType: "live",
-      type:      "video",
-      key:       env.YT_API_KEY,
+      part:       "id",
+      channelId:  "UC2I6ta1bWX7DnEuYNvHiptQ",
+      eventType:  "live",
+      type:       "video",
+      key:        env.YT_API_KEY,
     }).toString();
 
     const res = await fetch(url.toString());
-    if (!res.ok) return; // skip on error
+    if (!res.ok) return;  // on error, bail
 
-    const json = await res.json() as { items: Array<{ id: { videoId: string } }> };
+    const json      = (await res.json()) as { items: Array<{ id: { videoId: string } }> };
     const liveVideo = json.items[0]?.id.videoId ?? null;
 
-    // Tell the same DO about the new state via POST /update
-    const id   = env.LIVE_DO.idFromName("singleton");
-    const stub = env.LIVE_DO.get(id);
-    await stub.fetch("https://dummy/update", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ videoId: liveVideo }),
-    });
+    // 5) If no liveVideo is returned, the stream ended → clear state
+    if (liveVideo === null) {
+      await stub.fetch("https://dummy/update", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ videoId: null }),
+      });
+    }
+    // otherwise, still live—do nothing (we already have the ID)
   }
 };
