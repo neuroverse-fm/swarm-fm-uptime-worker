@@ -36,7 +36,18 @@ export class LiveStatusDO {
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
-		const path = url.pathname;
+		let path = url.pathname;
+
+		// —— STRIP OFF THE FIRST PATH SEGMENT ——
+		// e.g. /alerts/webhook   =>  /webhook
+		//      /alerts/ws        =>  /ws
+		//      /alerts           =>  /
+		const MOUNT = '/api/uptime'
+		if (path === MOUNT) {
+			path = '/';
+		} else if (path.startsWith(MOUNT + '/')) {
+			path = path.slice(MOUNT.length);
+		}
 
 		//
 		// 1) PubSubHubbub subscription handshake (GET)
@@ -126,20 +137,7 @@ export class LiveStatusDO {
 		//
 		// 4) WebSocket upgrade (GET /ws)
 		//
-		if (path === '/ws' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-			const [client, server] = Object.values(new WebSocketPair());
-			await server.accept();
-			this.clients.add(server);
-			server.addEventListener('close', () => this.clients.delete(server));
-
-			// send current state immediately
-			const current = await this.state.storage.get('videoId');
-			server.send(JSON.stringify({ live: !!current, videoId: current }));
-
-			return new Response(null, { status: 101, webSocket: client });
-		}
-
-		if (path === '/ws') {
+		if (path === '/') {
 			const upgrade = request.headers.get('Upgrade')?.toLowerCase();
 			if (upgrade === 'websocket') {
 				const [client, server] = Object.values(new WebSocketPair());
