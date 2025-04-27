@@ -105,11 +105,11 @@ export class LiveStatusDO {
 		// 3) Scheduled “update” from the cron (POST /update)
 		//
 		if (path === '/update' && request.method === 'POST') {
-			const token = request.headers.get("X-Control-Token")
+			const token = request.headers.get('X-Control-Token');
 			if (token !== this.env.UPDATE_SECRET) {
-				return new Response(null, { status: 403 })
+				return new Response(null, { status: 403 });
 			}
-			
+
 			const { videoId } = (await request.json()) as { videoId: string | null };
 			if (videoId) {
 				await this.state.storage.put('videoId', videoId);
@@ -139,17 +139,28 @@ export class LiveStatusDO {
 			return new Response(null, { status: 101, webSocket: client });
 		}
 
-		//
-		// 5) Pollable status endpoint (GET /status)
-		//
-		if (path === '/status' && request.method === 'GET') {
-			const videoId = await this.state.storage.get('videoId');
-			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
-				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 60' },
-			});
+		if (path === '/ws') {
+			const upgrade = request.headers.get('Upgrade')?.toLowerCase();
+			if (upgrade === 'websocket') {
+				const [client, server] = Object.values(new WebSocketPair());
+				await server.accept();
+				this.clients.add(server);
+				server.addEventListener('close', () => this.clients.delete(server));
+
+				// send current state immediately
+				const current = await this.state.storage.get('videoId');
+				server.send(JSON.stringify({ live: !!current, videoId: current }));
+
+				return new Response(null, { status: 101, webSocket: client });
+			} else {
+				return new Response(JSON.stringify({ error: 'Expected WebSocket upgrade on /ws' }), {
+					status: 426,
+					headers: { 'Content-Type': 'application/json', Upgrade: 'websocket' },
+				});
+			}
 		}
 
-		return new Response('Not found', { status: 404 });
+		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 	}
 }
 
