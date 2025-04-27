@@ -42,7 +42,7 @@ export class LiveStatusDO {
 		// e.g. /alerts/webhook   =>  /webhook
 		//      /alerts/ws        =>  /ws
 		//      /alerts           =>  /
-		const MOUNT = '/api/uptime'
+		const MOUNT = '/api/uptime';
 		if (path === MOUNT) {
 			path = '/';
 		} else if (path.startsWith(MOUNT + '/')) {
@@ -156,6 +156,16 @@ export class LiveStatusDO {
 					headers: { 'Content-Type': 'application/json', Upgrade: 'websocket' },
 				});
 			}
+		}
+
+		//
+		// 5) Backup /status route
+		//
+		if (path === '/status' && request.method === 'GET') {
+			const videoId = await this.state.storage.get('videoId');
+			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
+				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 60' },
+			});
 		}
 
 		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
