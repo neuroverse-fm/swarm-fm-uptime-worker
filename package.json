@@ -6,13 +6,15 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"style": "prettier --write ."
 	},
 	"devDependencies": {
-		"typescript": "^5.5.2",
-		"wrangler": "^4.13.2"
+		"prettier": "~3.5.3",
+		"typescript": "~5.8.3",
+		"wrangler": "~4.13.2"
 	},
 	"dependencies": {
-		"fast-xml-parser": "^5.2.1"
+		"fast-xml-parser": "~5.2.1"
 	}
 }

@@ -10,7 +10,7 @@ bindings = [
 
 [triggers]
 # Define cron schedules for triggering the worker
-crons = ["0 * * * *"] # Example: Runs at the start of every hour
+crons = ["*/1 * * * *"]
 
 [[migrations]]
 tag = "v1"
