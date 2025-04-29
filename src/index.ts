@@ -70,47 +70,75 @@ export class LiveStatusDO {
 		//
 		// 2) Webhook notification (POST /webhook)
 		//
-		if (path === '/webhook' && request.method === 'POST') {
+		if (path === "/webhook" && request.method === "POST") {
 			const secret = this.env.WEBHOOK_SECRET;
-
-			// 2a) Shared‐secret check
-			const token = request.headers.get('X-Webhook-Token') ?? '';
+		  
+			// Validate shared secret
+			const token = request.headers.get("X-Webhook-Token") ?? "";
 			if (!(await this.equals(token, secret))) {
-				return new Response('Unauthorized: bad token', { status: 401 });
+			  return new Response("Unauthorized", { status: 401 });
 			}
-
-			// 2b) Optional HMAC‐SHA256 signature check
-			const sigHeader = request.headers.get('X-Hub-Signature-256') ?? '';
-			if (sigHeader.startsWith('sha256=')) {
-				const payload = await request.clone().arrayBuffer();
-				const expectedBuf = await this.hmacSHA256(secret, payload);
-				const expectedHex = Array.from(new Uint8Array(expectedBuf))
-					.map((b) => b.toString(16).padStart(2, '0'))
-					.join('');
-				const actualHex = sigHeader.slice(7);
-
-				if (!(await this.equals(actualHex, expectedHex))) {
-					return new Response('Unauthorized: bad signature', { status: 401 });
-				}
+		  
+			// Validate optional HMAC signature
+			const sigHeader = request.headers.get("X-Hub-Signature-256") ?? "";
+			if (sigHeader.startsWith("sha256=")) {
+			  const payload = await request.clone().arrayBuffer();
+			  const expectedBuf = await this.hmacSHA256(secret, payload);
+			  const expectedHex = Array.from(new Uint8Array(expectedBuf))
+				.map(b => b.toString(16).padStart(2, "0"))
+				.join("");
+			  const actualHex = sigHeader.slice(7);
+		  
+			  if (!(await this.equals(actualHex, expectedHex))) {
+				return new Response("Unauthorized (bad signature)", { status: 401 });
+			  }
 			}
-
-			// 2c) Parse the Atom XML and extract videoId
+		  
+			// Parse Atom XML to get videoId
 			const xml = await request.text();
 			const parser = new XMLParser({ ignoreAttributes: false });
 			const obj = parser.parse(xml) as any;
 			const entry = Array.isArray(obj.feed.entry) ? obj.feed.entry[0] : obj.feed.entry;
-			const videoId = entry?.['yt:videoId'];
-
-			// 2d) Update state & broadcast if live
-			if (videoId) {
-				await this.state.storage.put('videoId', videoId);
-				for (const ws of this.clients) {
-					ws.send(JSON.stringify({ live: true, videoId }));
-				}
+			const videoId = entry?.["yt:videoId"];
+		  
+			if (!videoId) {
+			  return new Response(null, { status: 204 }); // no video ID, nothing to do
 			}
-
+		  
+			// Fetch video metadata from YouTube
+			const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+			url.search = new URLSearchParams({
+			  part: "snippet,liveStreamingDetails",
+			  id: videoId,
+			  key: this.env.YT_API_KEY,
+			}).toString();
+		  
+			const ytRes = await fetch(url.toString());
+			if (!ytRes.ok) {
+			  console.warn(`YouTube lookup failed for ${videoId}`);
+			  return new Response(null, { status: 204 });
+			}
+		  
+			const data: any = await ytRes.json();
+			const item = data.items?.[0];
+		  
+			// Check if this video is a livestream
+			const isLivestream = !!item?.liveStreamingDetails;
+		  
+			if (isLivestream) {
+			  console.log(`Detected livestream: ${videoId}`);
+		  
+			  await this.state.storage.put("videoId", videoId);
+			  for (const ws of this.clients) {
+				ws.send(JSON.stringify({ live: true, videoId }));
+			  }
+			} else {
+			  console.log(`Ignoring non-livestream video: ${videoId}`);
+			}
+		  
 			return new Response(null, { status: 204 });
-		}
+		  }
+		  
 
 		//
 		// 3) Scheduled “update” from the cron (POST /update)
@@ -164,7 +192,7 @@ export class LiveStatusDO {
 		if (path === '/status' && request.method === 'GET') {
 			const videoId = await this.state.storage.get('videoId');
 			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
-				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 60' },
+				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 180' },
 			});
 		}
 
