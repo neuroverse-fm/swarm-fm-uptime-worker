@@ -70,75 +70,74 @@ export class LiveStatusDO {
 		//
 		// 2) Webhook notification (POST /webhook)
 		//
-		if (path === "/webhook" && request.method === "POST") {
+		if (path === '/webhook' && request.method === 'POST') {
 			const secret = this.env.WEBHOOK_SECRET;
-		  
+
 			// Validate shared secret
-			const token = request.headers.get("X-Webhook-Token") ?? "";
+			const token = request.headers.get('X-Webhook-Token') ?? '';
 			if (!(await this.equals(token, secret))) {
-			  return new Response("Unauthorized", { status: 401 });
+				return new Response('Unauthorized', { status: 401 });
 			}
-		  
+
 			// Validate optional HMAC signature
-			const sigHeader = request.headers.get("X-Hub-Signature-256") ?? "";
-			if (sigHeader.startsWith("sha256=")) {
-			  const payload = await request.clone().arrayBuffer();
-			  const expectedBuf = await this.hmacSHA256(secret, payload);
-			  const expectedHex = Array.from(new Uint8Array(expectedBuf))
-				.map(b => b.toString(16).padStart(2, "0"))
-				.join("");
-			  const actualHex = sigHeader.slice(7);
-		  
-			  if (!(await this.equals(actualHex, expectedHex))) {
-				return new Response("Unauthorized (bad signature)", { status: 401 });
-			  }
+			const sigHeader = request.headers.get('X-Hub-Signature-256') ?? '';
+			if (sigHeader.startsWith('sha256=')) {
+				const payload = await request.clone().arrayBuffer();
+				const expectedBuf = await this.hmacSHA256(secret, payload);
+				const expectedHex = Array.from(new Uint8Array(expectedBuf))
+					.map((b) => b.toString(16).padStart(2, '0'))
+					.join('');
+				const actualHex = sigHeader.slice(7);
+
+				if (!(await this.equals(actualHex, expectedHex))) {
+					return new Response('Unauthorized (bad signature)', { status: 401 });
+				}
 			}
-		  
+
 			// Parse Atom XML to get videoId
 			const xml = await request.text();
 			const parser = new XMLParser({ ignoreAttributes: false });
 			const obj = parser.parse(xml) as any;
 			const entry = Array.isArray(obj.feed.entry) ? obj.feed.entry[0] : obj.feed.entry;
-			const videoId = entry?.["yt:videoId"];
-		  
+			const videoId = entry?.['yt:videoId'];
+
 			if (!videoId) {
-			  return new Response(null, { status: 204 }); // no video ID, nothing to do
+				return new Response(null, { status: 204 }); // no video ID, nothing to do
 			}
-		  
+
 			// Fetch video metadata from YouTube
-			const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+			const url = new URL('https://www.googleapis.com/youtube/v3/videos');
 			url.search = new URLSearchParams({
-			  part: "snippet,liveStreamingDetails",
-			  id: videoId,
-			  key: this.env.YT_API_KEY,
+				part: 'snippet,liveStreamingDetails',
+				id: videoId,
+				key: this.env.YT_API_KEY,
 			}).toString();
-		  
+
 			const ytRes = await fetch(url.toString());
 			if (!ytRes.ok) {
-			  console.warn(`YouTube lookup failed for ${videoId}`);
-			  return new Response(null, { status: 204 });
+				console.warn(`YouTube lookup failed for ${videoId}`);
+				return new Response(null, { status: 204 });
 			}
-		  
+
 			const data: any = await ytRes.json();
 			const item = data.items?.[0];
-		  
+
 			// Check if this video is a livestream
 			const isLivestream = !!item?.liveStreamingDetails;
-		  
+
 			if (isLivestream) {
-			  console.log(`Detected livestream: ${videoId}`);
-		  
-			  await this.state.storage.put("videoId", videoId);
-			  for (const ws of this.clients) {
-				ws.send(JSON.stringify({ live: true, videoId }));
-			  }
+				console.log(`Detected livestream: ${videoId}`);
+
+				await this.state.storage.put('videoId', videoId);
+				for (const ws of this.clients) {
+					ws.send(JSON.stringify({ live: true, videoId }));
+				}
 			} else {
-			  console.log(`Ignoring non-livestream video: ${videoId}`);
+				console.log(`Ignoring non-livestream video: ${videoId}`);
 			}
-		  
+
 			return new Response(null, { status: 204 });
-		  }
-		  
+		}
 
 		//
 		// 3) Scheduled “update” from the cron (POST /update)
@@ -208,44 +207,52 @@ export default {
 		return stub.fetch(request);
 	},
 
-	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-		// 1) Grab the DO stub
+	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+		// 1) Get the DO stub and current videoId
 		const id = env.LIVE_DO.idFromName('singleton');
 		const stub = env.LIVE_DO.get(id);
-
-		// 2) Check current live state
 		const statusRes = await stub.fetch('https://dummy/status');
 		const { videoId } = (await statusRes.json()) as { videoId: string | null };
 
-		// 3) If we're NOT live (videoId === null), skip polling
-		if (videoId === null) {
-			return;
-		}
+		// 2) If we're not live (no videoId), bail out—no API call
+		if (!videoId) return;
 
-		// 4) Otherwise, poll YouTube to see if the live has ended
-		const url = new URL('https://www.googleapis.com/youtube/v3/search');
+		// 3) Check the single video via videos.list
+		const url = new URL('https://www.googleapis.com/youtube/v3/videos');
 		url.search = new URLSearchParams({
-			part: 'id',
-			channelId: 'UC2I6ta1bWX7DnEuYNvHiptQ',
-			eventType: 'live',
-			type: 'video',
+			part: 'liveStreamingDetails',
+			id: videoId,
 			key: env.YT_API_KEY,
 		}).toString();
 
-		const res = await fetch(url.toString());
-		if (!res.ok) return; // on error, bail
+		const ytRes = await fetch(url.toString());
+		if (!ytRes.ok) {
+			console.log(`Encountered an error with YouTube API: ${JSON.stringify(ytRes)}}`)
+			return;
+		}
 
-		const json = (await res.json()) as { items: Array<{ id: { videoId: string } }> };
-		const liveVideo = json.items[0]?.id.videoId ?? null;
+		const data = (await ytRes.json()) as {
+			items?: Array<{
+				liveStreamingDetails?: {
+					actualStartTime?: string;
+					actualEndTime?: string;
+				};
+			}>;
+		};
+		const item = data.items?.[0];
+		const details = item?.liveStreamingDetails;
 
-		// 5) If no liveVideo is returned, the stream ended → clear state
-		if (liveVideo === null) {
+		// 4) Determine if the stream has ended:
+		//    - If there's no liveStreamingDetails, or actualEndTime is set ⇒ ended
+		const hasEnded = !details || !!details.actualEndTime;
+		if (hasEnded) {
+			// clear state & broadcast “went offline”
 			await stub.fetch('https://dummy/update', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json', 'X-Control-Token': env.UPDATE_SECRET },
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ videoId: null }),
 			});
 		}
-		// otherwise, still live—do nothing (we already have the ID)
+		// otherwise: still live → do nothing
 	},
 };
