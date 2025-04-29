@@ -191,7 +191,7 @@ export class LiveStatusDO {
 		if (path === '/status' && request.method === 'GET') {
 			const videoId = await this.state.storage.get('videoId');
 			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
-				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 180' },
+				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120' },
 			});
 		}
 
