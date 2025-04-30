@@ -208,8 +208,9 @@ export class LiveStatusDO {
 				const retryAfter = Math.ceil((COOLDOWN - since) / 1000);
 				return new Response(
 					JSON.stringify({
-						error: 'Cooldown active',
+						error: 'Stop hitting the API.',
 						retry_after: retryAfter, // seconds
+						statusText: 'Cooldown is active.'
 					}),
 					{
 						status: 429,
@@ -256,7 +257,7 @@ export class LiveStatusDO {
 
 			// 3) Return success or a 404 if nothing live
 			if (!newVid) {
-				return new Response(JSON.stringify({ error: 'No active livestream found' }), {
+				return new Response(JSON.stringify({ live: false, videoId: null }), {
 					status: 404,
 					headers: { 'Content-Type': 'application/json' },
 				});
