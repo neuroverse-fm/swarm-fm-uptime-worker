@@ -42,7 +42,7 @@ export class LiveStatusDO {
 		// e.g. /alerts/webhook   =>  /webhook
 		//      /alerts/ws        =>  /ws
 		//      /alerts           =>  /
-		const MOUNT = '/api/uptime';
+		const MOUNT: string = '/api/uptime';
 		if (path === MOUNT) {
 			path = '/';
 		} else if (path.startsWith(MOUNT + '/')) {
@@ -195,6 +195,76 @@ export class LiveStatusDO {
 			});
 		}
 
+		//
+		// 6) Flush & re-search API
+		//
+		if (path === '/flush' && request.method === 'POST') {
+			const now = Date.now();
+			const COOLDOWN = 30 * 60 * 1000; // 30 minutes
+			const lastFlush = (await this.state.storage.get<number>('lastFlush')) ?? 0;
+			const since = now - lastFlush;
+
+			if (since < COOLDOWN) {
+				const retryAfter = Math.ceil((COOLDOWN - since) / 1000);
+				return new Response(
+					JSON.stringify({
+						error: 'Cooldown active',
+						retry_after: retryAfter, // seconds
+					}),
+					{
+						status: 429,
+						headers: { 'Content-Type': 'application/json' },
+					},
+				);
+			}
+
+			// mark this flush so next can only happen after 30m
+			await this.state.storage.put('lastFlush', now);
+
+			// 1) Query the YouTube API for any live stream
+			const ytUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+			ytUrl.search = new URLSearchParams({
+				part: 'id',
+				channelId: 'UC2I6ta1bWX7DnEuYNvHiptQ',
+				eventType: 'live',
+				type: 'video',
+				key: this.env.YT_API_KEY,
+			}).toString();
+
+			const ytRes = await fetch(ytUrl.toString());
+			if (!ytRes.ok) {
+				return new Response(
+					JSON.stringify({
+						error: 'YouTube Data API error',
+						status: ytRes.status,
+						statusText: ytRes.statusText,
+					}),
+					{ status: 502, headers: { 'Content-Type': 'application/json' } },
+				);
+			}
+
+			const data = (await ytRes.json()) as { items?: Array<{ id: { videoId: string } }> };
+			const newVid = data.items?.[0]?.id.videoId ?? null;
+
+			// 2) Update state & broadcast
+			//    — set to null explicitly if no livestream
+			await this.state.storage.put('videoId', newVid);
+
+			for (const ws of this.clients) {
+				ws.send(JSON.stringify({ live: !!newVid, videoId: newVid }));
+			}
+
+			// 3) Return success or a 404 if nothing live
+			if (!newVid) {
+				return new Response(JSON.stringify({ error: 'No active livestream found' }), {
+					status: 404,
+					headers: { 'Content-Type': 'application/json' },
+				});
+			}
+
+			return new Response(JSON.stringify({ live: true, videoId: newVid }), { headers: { 'Content-Type': 'application/json' } });
+		}
+
 		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
 	}
 }
@@ -202,9 +272,18 @@ export class LiveStatusDO {
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		// All HTTP traffic is routed into the singleton DO
-		const id = env.LIVE_DO.idFromName('singleton');
-		const stub = env.LIVE_DO.get(id);
-		return stub.fetch(request);
+		try {
+			const id = env.LIVE_DO.idFromName('singleton');
+			const stub = env.LIVE_DO.get(id);
+			return await stub.fetch(request);
+
+		} catch (err: any) {
+			// Catch *any* error and return JSON to prevent Cloudflare from showing a HTML error.
+			return new Response(JSON.stringify({ error: err?.message ?? 'Unknown error' }), {
+				status: err?.status || 500,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		}
 	},
 
 	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
@@ -227,7 +306,7 @@ export default {
 
 		const ytRes = await fetch(url.toString());
 		if (!ytRes.ok) {
-			console.log(`Encountered an error with YouTube API: ${JSON.stringify(ytRes)}}`)
+			console.warn(`Encountered an error with YouTube API: ${JSON.stringify(ytRes)}`);
 			return;
 		}
 

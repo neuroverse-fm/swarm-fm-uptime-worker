@@ -15,3 +15,6 @@ crons = ["*/1 * * * *"]
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = [ "LiveStatusDO" ]
+
+[observability.logs]
+enabled = true
