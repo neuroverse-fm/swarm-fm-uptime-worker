@@ -1,5 +1,11 @@
 import { XMLParser } from 'fast-xml-parser';
 
+const corsHeaders: { [key: string]: string } = {
+	"Access-Control-Allow-Origin": "*",
+  	"Access-Control-Allow-Methods": "GET, POST",
+  	"Access-Control-Allow-Headers": "Content-Type",
+}
+
 interface Env {
 	LIVE_DO: DurableObjectNamespace;
 	UPDATE_SECRET: string;
@@ -61,10 +67,10 @@ export class LiveStatusDO {
 			const expectedTopic = 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC2I6ta1bWX7DnEuYNvHiptQ';
 
 			if (mode === 'subscribe' && topic === expectedTopic && verifyTok === this.env.VERIFY_TOKEN && challenge) {
-				return new Response(challenge, { status: 200 });
+				return new Response(challenge, { status: 200, headers: { ...corsHeaders } });
 			}
 
-			return new Response('Invalid subscription request', { status: 400 });
+			return new Response('Invalid subscription request', { status: 400, headers: { ...corsHeaders } });
 		}
 
 		//
@@ -76,7 +82,7 @@ export class LiveStatusDO {
 			// Validate shared secret
 			const token = request.headers.get('X-Webhook-Token') ?? '';
 			if (!(await this.equals(token, secret))) {
-				return new Response('Unauthorized', { status: 401 });
+				return new Response('Unauthorized', { status: 401, headers: { ...corsHeaders } });
 			}
 
 			// Validate optional HMAC signature
@@ -90,7 +96,7 @@ export class LiveStatusDO {
 				const actualHex = sigHeader.slice(7);
 
 				if (!(await this.equals(actualHex, expectedHex))) {
-					return new Response('Unauthorized (bad signature)', { status: 401 });
+					return new Response('Unauthorized (bad signature)', { status: 401, headers: { ...corsHeaders } });
 				}
 			}
 
@@ -102,7 +108,7 @@ export class LiveStatusDO {
 			const videoId = entry?.['yt:videoId'];
 
 			if (!videoId) {
-				return new Response(null, { status: 204 }); // no video ID, nothing to do
+				return new Response(null, { status: 204, headers: { ...corsHeaders } }); // no video ID, nothing to do
 			}
 
 			// Fetch video metadata from YouTube
@@ -116,7 +122,7 @@ export class LiveStatusDO {
 			const ytRes = await fetch(url.toString());
 			if (!ytRes.ok) {
 				console.warn(`YouTube lookup failed for ${videoId}`);
-				return new Response(null, { status: 204 });
+				return new Response(null, { status: 204, headers: { ...corsHeaders } });
 			}
 
 			const data: any = await ytRes.json();
@@ -136,7 +142,7 @@ export class LiveStatusDO {
 				console.log(`Ignoring non-livestream video: ${videoId}`);
 			}
 
-			return new Response(null, { status: 204 });
+			return new Response(null, { status: 204, headers: { ...corsHeaders } });
 		}
 
 		//
@@ -145,7 +151,7 @@ export class LiveStatusDO {
 		if (path === '/update' && request.method === 'POST') {
 			const token = request.headers.get('X-Control-Token');
 			if (token !== this.env.UPDATE_SECRET) {
-				return new Response(null, { status: 403 });
+				return new Response(null, { status: 403, headers: { ...corsHeaders } });
 			}
 
 			const { videoId } = (await request.json()) as { videoId: string | null };
@@ -158,7 +164,7 @@ export class LiveStatusDO {
 			for (const ws of this.clients) {
 				ws.send(JSON.stringify({ live: !!videoId, videoId }));
 			}
-			return new Response(null, { status: 204 });
+			return new Response(null, { status: 204, headers: { ...corsHeaders } });
 		}
 
 		//
@@ -176,11 +182,11 @@ export class LiveStatusDO {
 				const current = await this.state.storage.get('videoId');
 				server.send(JSON.stringify({ live: !!current, videoId: current }));
 
-				return new Response(null, { status: 101, webSocket: client });
+				return new Response(null, { status: 101, webSocket: client, headers: { ...corsHeaders } });
 			} else {
 				return new Response(JSON.stringify({ error: 'Expected WebSocket upgrade on /ws' }), {
 					status: 426,
-					headers: { 'Content-Type': 'application/json', Upgrade: 'websocket' },
+					headers: { 'Content-Type': 'application/json', Upgrade: 'websocket', ...corsHeaders },
 				});
 			}
 		}
@@ -191,7 +197,7 @@ export class LiveStatusDO {
 		if (path === '/status' && request.method === 'GET') {
 			const videoId = await this.state.storage.get('videoId');
 			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
-				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120' },
+				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120', ...corsHeaders },
 			});
 		}
 
@@ -214,7 +220,7 @@ export class LiveStatusDO {
 					}),
 					{
 						status: 429,
-						headers: { 'Content-Type': 'application/json' },
+						headers: { 'Content-Type': 'application/json', ...corsHeaders },
 					},
 				);
 			}
@@ -240,7 +246,7 @@ export class LiveStatusDO {
 						status: ytRes.status,
 						statusText: ytRes.statusText,
 					}),
-					{ status: 502, headers: { 'Content-Type': 'application/json' } },
+					{ status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
 				);
 			}
 
@@ -259,14 +265,14 @@ export class LiveStatusDO {
 			if (!newVid) {
 				return new Response(JSON.stringify({ live: false, videoId: null }), {
 					status: 404,
-					headers: { 'Content-Type': 'application/json' },
+					headers: { 'Content-Type': 'application/json', ...corsHeaders },
 				});
 			}
 
-			return new Response(JSON.stringify({ live: true, videoId: newVid }), { headers: { 'Content-Type': 'application/json' } });
+			return new Response(JSON.stringify({ live: true, videoId: newVid }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 		}
 
-		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders } });
 	}
 }
 
