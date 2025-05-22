@@ -184,7 +184,7 @@ export class LiveStatusDO {
 
 				return new Response(null, { status: 101, webSocket: client, headers: { ...corsHeaders } });
 			} else {
-				return new Response(JSON.stringify({ error: 'Expected WebSocket upgrade on /ws' }), {
+				return new Response(JSON.stringify({ error: 'Expected WebSocket upgrade on / (or /api/uptime)' }), {
 					status: 426,
 					headers: { 'Content-Type': 'application/json', Upgrade: 'websocket', ...corsHeaders },
 				});
