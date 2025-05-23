@@ -2,6 +2,10 @@ name = "swarm-fm-uptime-worker"
 main = "src/index.ts"
 compatibility_date = "2025-04-25"
 
+[vars]
+NODE_VERSION = "22.14.0"
+PNPM_VERSION = "10.8.0"
+
 # Durable Objects
 [durable_objects]
 bindings = [
