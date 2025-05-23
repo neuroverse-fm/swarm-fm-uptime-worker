@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <entry>
+    <id>yt:video:xHvI0JannXc</id>
+    <yt:videoId>xHvI0JannXc</yt:videoId>
+    <yt:channelId>UC2I6ta1bWX7DnEuYNvHiptQ</yt:channelId>
+  </entry>
+</feed>
