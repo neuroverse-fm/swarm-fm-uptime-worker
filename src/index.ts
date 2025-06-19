@@ -1,10 +1,10 @@
 import { XMLParser } from 'fast-xml-parser';
 
 const corsHeaders: { [key: string]: string } = {
-	"Access-Control-Allow-Origin": "*",
-  	"Access-Control-Allow-Methods": "GET, POST",
-  	"Access-Control-Allow-Headers": "Content-Type",
-}
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'GET, POST',
+	'Access-Control-Allow-Headers': 'Content-Type',
+};
 
 interface Env {
 	LIVE_DO: DurableObjectNamespace;
@@ -216,7 +216,7 @@ export class LiveStatusDO {
 					JSON.stringify({
 						error: 'Stop hitting the API.',
 						retry_after: retryAfter, // seconds
-						statusText: 'Cooldown is active.'
+						statusText: 'Cooldown is active.',
 					}),
 					{
 						status: 429,
@@ -269,7 +269,9 @@ export class LiveStatusDO {
 				});
 			}
 
-			return new Response(JSON.stringify({ live: true, videoId: newVid }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+			return new Response(JSON.stringify({ live: true, videoId: newVid }), {
+				headers: { 'Content-Type': 'application/json', ...corsHeaders },
+			});
 		}
 
 		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders } });
@@ -283,7 +285,6 @@ export default {
 			const id = env.LIVE_DO.idFromName('singleton');
 			const stub = env.LIVE_DO.get(id);
 			return await stub.fetch(request);
-
 		} catch (err: any) {
 			// Catch *any* error and return JSON to prevent Cloudflare from showing a HTML error.
 			return new Response(JSON.stringify({ error: err?.message ?? 'Unknown error' }), {
@@ -335,7 +336,7 @@ export default {
 			// clear state & broadcast “went offline”
 			await stub.fetch('https://dummy/update', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', 'X-Control-Token': env.UPDATE_SECRET },
 				body: JSON.stringify({ videoId: null }),
 			});
 		}
