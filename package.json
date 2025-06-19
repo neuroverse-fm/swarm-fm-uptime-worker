@@ -18,6 +18,6 @@
 		"wrangler": "~4.16.1"
 	},
 	"dependencies": {
-		"fast-xml-parser": "~5.2.3"
+		"fast-xml-parser": "~5.2.5"
 	}
 }
