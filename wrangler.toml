@@ -10,7 +10,7 @@ bindings = [
 
 [triggers]
 # Define cron schedules for triggering the worker
-crons = ["*/1 * * * *"]
+crons = ["*/5 * * * *"]
 
 [[migrations]]
 tag = "v1"
