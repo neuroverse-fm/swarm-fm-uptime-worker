@@ -1,5 +1,4 @@
 import { XMLParser } from 'fast-xml-parser';
-import { writeFileSync, appendFileSync, readFileSync } from 'fs';
 
 const corsHeaders: { [key: string]: string } = {
 	'Access-Control-Allow-Origin': '*',
@@ -18,24 +17,17 @@ interface Env {
 export class LiveStatusDO {
 	private state: DurableObjectState;
 	private env: Env;
-	private logFilePath: string; // Path to the runtime log file
 	private clients = new Set<WebSocket>();
 
 	constructor(state: DurableObjectState, env: Env) {
 		this.state = state;
 		this.env = env;
-
-		// Create the log file with a timestamp in the name
-		const timestamp = new Date().toISOString().replace(/[:.]/g, '-'); // Replace invalid characters for file names
-		this.logFilePath = `/tmp/runtime-log-${timestamp}.txt`;
-		writeFileSync(this.logFilePath, `Log file created at ${new Date().toISOString()}\n`);
 	}
 
 	// Helper to add logs directly to the file
 	private addLog(message: string): void {
 		const timestamp = new Date().toISOString();
 		const logEntry = `[${timestamp}] ${message}\n`;
-		appendFileSync(this.logFilePath, logEntry);
 		console.log(logEntry.trim());
 	}
 
@@ -68,15 +60,6 @@ export class LiveStatusDO {
 			path = '/';
 		} else if (path.startsWith(MOUNT + '/')) {
 			path = path.slice(MOUNT.length);
-		}
-
-		// New route: Return logs
-		if (path === '/logs' && request.method === 'GET') {
-			this.addLog('Logs requested');
-			const fileContents = readFileSync(this.logFilePath, 'utf8');
-			return new Response(fileContents, {
-				headers: { 'Content-Type': 'text/plain', ...corsHeaders },
-			});
 		}
 
 		//
