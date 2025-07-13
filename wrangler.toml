@@ -18,3 +18,7 @@ new_sqlite_classes = [ "LiveStatusDO" ]
 
 [observability.logs]
 enabled = true
+
+[[analytics_engine_datasets]]
+binding = "swarmfm_logs"
+dataset = "SWARMFM_LOGS"
