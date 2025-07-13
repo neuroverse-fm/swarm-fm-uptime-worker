@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import { config } from 'dotenv';
 import { resolve } from 'path';
 
-// Load environment variables from .dev.vars (only for API key)
+// Load environment variables from .dev.vars
 config({ path: resolve(__dirname, '../.dev.vars') });
 
 // Get the API key from environment variables
@@ -13,41 +13,38 @@ if (!YT_API_KEY) {
 	process.exit(1);
 }
 
-// Get the video ID from command line arguments
+// Get the channel ID from command line arguments
 if (process.argv.length < 3) {
-	console.error('Usage: tsx ./utils/youtube-fetch.ts <VIDEO_ID>');
-	console.error('Example: tsx ./utils/youtube-fetch.ts dQw4w9WgXcQ');
+	console.error('Usage: tsx ./utils/channel-id-query.ts <CHANNEL_ID>');
+	console.error('Example: tsx ./utils/channel-id-query.ts UC2I6ta1bWX7DnEuYNvHiptQ');
 	process.exit(1);
 }
 
-const VIDEO_ID = process.argv[2];
+const CHANNEL_ID = process.argv[2];
 
 // Detect if output is being piped or redirected
 const isCliMode = !process.stdout.isTTY;
 
-async function queryYouTubeAPI(apiKey: string, videoId: string) {
+async function queryChannelDetails(apiKey: string, channelId: string) {
 	try {
-		const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+		const url = new URL('https://www.googleapis.com/youtube/v3/channels');
 		url.search = new URLSearchParams({
-			part: 'liveStreamingDetails',
-			id: videoId,
+			part: 'snippet,statistics',
+			id: channelId,
 			key: apiKey,
 		}).toString();
 
 		// Always log fetching activity to stderr (won't interfere with piped output)
-		console.error(`Querying YouTube API for video: ${videoId}`);
+		console.error(`Querying YouTube API for channel: ${channelId}`);
 
 		const response = await fetch(url.toString());
 		if (!response.ok) {
+			const errorMessage = `YouTube API Error: ${response.status} ${response.statusText}`;
 			if (isCliMode) {
 				// In CLI mode, output error as JSON to stderr
-				console.error(JSON.stringify({
-					error: `YouTube API Error: ${response.status} ${response.statusText}`,
-					status: response.status,
-					statusText: response.statusText
-				}, null, 2));
+				console.error(JSON.stringify({ error: errorMessage }, null, 2));
 			} else {
-				console.error(`YouTube API Error: ${response.status} ${response.statusText}`);
+				console.error(errorMessage);
 			}
 			return;
 		}
@@ -66,10 +63,7 @@ async function queryYouTubeAPI(apiKey: string, videoId: string) {
 
 		if (isCliMode) {
 			// In CLI mode, output error as formatted JSON to stderr
-			console.error(JSON.stringify({
-				error: 'Error querying YouTube API',
-				message: errorMessage
-			}, null, 2));
+			console.error(JSON.stringify({ error: 'Error querying YouTube API', message: errorMessage }, null, 2));
 		} else {
 			console.error('Error querying YouTube API:', errorMessage);
 		}
@@ -77,4 +71,4 @@ async function queryYouTubeAPI(apiKey: string, videoId: string) {
 }
 
 // Run the query
-queryYouTubeAPI(YT_API_KEY, VIDEO_ID);
+queryChannelDetails(YT_API_KEY, CHANNEL_ID);
