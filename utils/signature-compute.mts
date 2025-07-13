@@ -51,10 +51,16 @@ try {
 
 	if (isCliMode) {
 		// In CLI mode, output error as JSON to stderr
-		console.error(JSON.stringify({
-			error: 'Error computing signature',
-			message: errorMessage
-		}, null, 2));
+		console.error(
+			JSON.stringify(
+				{
+					error: 'Error computing signature',
+					message: errorMessage,
+				},
+				null,
+				2,
+			),
+		);
 	} else {
 		console.error('Error computing signature:', errorMessage);
 	}

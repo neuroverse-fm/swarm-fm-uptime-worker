@@ -41,11 +41,17 @@ async function queryYouTubeAPI(apiKey: string, videoId: string) {
 		if (!response.ok) {
 			if (isCliMode) {
 				// In CLI mode, output error as JSON to stderr
-				console.error(JSON.stringify({
-					error: `YouTube API Error: ${response.status} ${response.statusText}`,
-					status: response.status,
-					statusText: response.statusText
-				}, null, 2));
+				console.error(
+					JSON.stringify(
+						{
+							error: `YouTube API Error: ${response.status} ${response.statusText}`,
+							status: response.status,
+							statusText: response.statusText,
+						},
+						null,
+						2,
+					),
+				);
 			} else {
 				console.error(`YouTube API Error: ${response.status} ${response.statusText}`);
 			}
@@ -66,10 +72,16 @@ async function queryYouTubeAPI(apiKey: string, videoId: string) {
 
 		if (isCliMode) {
 			// In CLI mode, output error as formatted JSON to stderr
-			console.error(JSON.stringify({
-				error: 'Error querying YouTube API',
-				message: errorMessage
-			}, null, 2));
+			console.error(
+				JSON.stringify(
+					{
+						error: 'Error querying YouTube API',
+						message: errorMessage,
+					},
+					null,
+					2,
+				),
+			);
 		} else {
 			console.error('Error querying YouTube API:', errorMessage);
 		}
