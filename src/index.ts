@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { writeFileSync, appendFileSync, readFileSync } from 'fs';
 
 const corsHeaders: { [key: string]: string } = {
 	'Access-Control-Allow-Origin': '*',
@@ -17,11 +18,25 @@ interface Env {
 export class LiveStatusDO {
 	private state: DurableObjectState;
 	private env: Env;
+	private logFilePath: string; // Path to the runtime log file
 	private clients = new Set<WebSocket>();
 
 	constructor(state: DurableObjectState, env: Env) {
 		this.state = state;
 		this.env = env;
+
+		// Create the log file with a timestamp in the name
+		const timestamp = new Date().toISOString().replace(/[:.]/g, '-'); // Replace invalid characters for file names
+		this.logFilePath = `/tmp/runtime-log-${timestamp}.txt`;
+		writeFileSync(this.logFilePath, `Log file created at ${new Date().toISOString()}\n`);
+	}
+
+	// Helper to add logs directly to the file
+	private addLog(message: string): void {
+		const timestamp = new Date().toISOString();
+		const logEntry = `[${timestamp}] ${message}\n`;
+		appendFileSync(this.logFilePath, logEntry);
+		console.log(logEntry.trim());
 	}
 
 	// constant‐time compare
@@ -55,6 +70,15 @@ export class LiveStatusDO {
 			path = path.slice(MOUNT.length);
 		}
 
+		// New route: Return logs
+		if (path === '/logs' && request.method === 'GET') {
+			this.addLog('Logs requested');
+			const fileContents = readFileSync(this.logFilePath, 'utf8');
+			return new Response(fileContents, {
+				headers: { 'Content-Type': 'text/plain', ...corsHeaders },
+			});
+		}
+
 		//
 		// 1) PubSubHubbub subscription handshake (GET)
 		//
@@ -77,6 +101,8 @@ export class LiveStatusDO {
 		// 2) Webhook notification (POST /webhook)
 		//
 		if (path === '/webhook' && request.method === 'POST') {
+			this.addLog('Webhook notification received');
+
 			const secret = this.env.WEBHOOK_SECRET;
 
 			// Validate shared secret
@@ -114,7 +140,7 @@ export class LiveStatusDO {
 			// Fetch video metadata from YouTube
 			const url = new URL('https://www.googleapis.com/youtube/v3/videos');
 			url.search = new URLSearchParams({
-				part: 'snippet,liveStreamingDetails',
+				part: 'liveStreamingDetails',
 				id: videoId,
 				key: this.env.YT_API_KEY,
 			}).toString();
@@ -149,6 +175,8 @@ export class LiveStatusDO {
 		// 3) Scheduled “update” from the cron (POST /update)
 		//
 		if (path === '/update' && request.method === 'POST') {
+			this.addLog('Update request received');
+
 			const token = request.headers.get('X-Control-Token');
 			if (token !== this.env.UPDATE_SECRET) {
 				return new Response(null, { status: 403, headers: { ...corsHeaders } });
@@ -195,6 +223,8 @@ export class LiveStatusDO {
 		// 5) Backup /status route
 		//
 		if (path === '/status' && request.method === 'GET') {
+			this.addLog('Status requested');
+
 			const videoId = await this.state.storage.get('videoId');
 			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
 				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120', ...corsHeaders },
@@ -205,6 +235,8 @@ export class LiveStatusDO {
 		// 6) Flush & re-search API
 		//
 		if (path === '/flush' && request.method === 'POST') {
+			this.addLog('Flush request received');
+
 			const now = Date.now();
 			const COOLDOWN = 30 * 60 * 1000; // 30 minutes
 			const lastFlush = (await this.state.storage.get<number>('lastFlush')) ?? 0;
@@ -274,19 +306,20 @@ export class LiveStatusDO {
 			});
 		}
 
+		// Default response for unknown routes
+		this.addLog(`Unknown route accessed: ${path}`);
 		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders } });
 	}
 }
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		// All HTTP traffic is routed into the singleton DO
 		try {
 			const id = env.LIVE_DO.idFromName('singleton');
 			const stub = env.LIVE_DO.get(id);
 			return await stub.fetch(request);
 		} catch (err: any) {
-			// Catch *any* error and return JSON to prevent Cloudflare from showing a HTML error.
+			console.error('Error in fetch handler:', err);
 			return new Response(JSON.stringify({ error: err?.message ?? 'Unknown error' }), {
 				status: err?.status || 500,
 				headers: { 'Content-Type': 'application/json' },
@@ -295,16 +328,13 @@ export default {
 	},
 
 	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-		// 1) Get the DO stub and current videoId
 		const id = env.LIVE_DO.idFromName('singleton');
 		const stub = env.LIVE_DO.get(id);
-		const statusRes = await stub.fetch('https://dummy/status');
+		const statusRes = await stub.fetch('/api/uptime/status');
 		const { videoId } = (await statusRes.json()) as { videoId: string | null };
 
-		// 2) If we're not live (no videoId), bail out—no API call
 		if (!videoId) return;
 
-		// 3) Check the single video via videos.list
 		const url = new URL('https://www.googleapis.com/youtube/v3/videos');
 		url.search = new URLSearchParams({
 			part: 'liveStreamingDetails',
@@ -329,17 +359,13 @@ export default {
 		const item = data.items?.[0];
 		const details = item?.liveStreamingDetails;
 
-		// 4) Determine if the stream has ended:
-		//    - If there's no liveStreamingDetails, or actualEndTime is set ⇒ ended
 		const hasEnded = !details || !!details.actualEndTime;
 		if (hasEnded) {
-			// clear state & broadcast “went offline”
-			await stub.fetch('https://dummy/update', {
+			await stub.fetch('/api/uptime/update', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', 'X-Control-Token': env.UPDATE_SECRET },
 				body: JSON.stringify({ videoId: null }),
 			});
 		}
-		// otherwise: still live → do nothing
 	},
 };
