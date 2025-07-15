@@ -12,6 +12,7 @@ interface Env {
 	WEBHOOK_SECRET: string;
 	VERIFY_TOKEN: string;
 	YT_API_KEY: string;
+	PSHB_LEASE_SECONDS?: string;
 }
 
 export class LiveStatusDO {
@@ -22,13 +23,6 @@ export class LiveStatusDO {
 	constructor(state: DurableObjectState, env: Env) {
 		this.state = state;
 		this.env = env;
-	}
-
-	// Helper to add logs directly to the file
-	private addLog(message: string): void {
-		const timestamp = new Date().toISOString();
-		const logEntry = `[${timestamp}] ${message}\n`;
-		console.log(logEntry.trim());
 	}
 
 	// constant‐time compare
@@ -74,6 +68,9 @@ export class LiveStatusDO {
 			const expectedTopic = 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC2I6ta1bWX7DnEuYNvHiptQ';
 
 			if (mode === 'subscribe' && topic === expectedTopic && verifyTok === this.env.VERIFY_TOKEN && challenge) {
+				const leaseSeconds = Number(url.searchParams.get("hub.lease_seconds")) ?? 432_000;
+				const expiresAt = Date.now() + leaseSeconds * 1000;
+				await this.state.storage.put("pshbExpires", expiresAt)
 				return new Response(challenge, { status: 200, headers: { ...corsHeaders } });
 			}
 
@@ -84,8 +81,6 @@ export class LiveStatusDO {
 		// 2) Webhook notification (POST /webhook)
 		//
 		if (path === '/webhook' && request.method === 'POST') {
-			this.addLog('Webhook notification received');
-
 			const secret = this.env.WEBHOOK_SECRET;
 
 			// Validate shared secret
@@ -158,8 +153,6 @@ export class LiveStatusDO {
 		// 3) Scheduled “update” from the cron (POST /update)
 		//
 		if (path === '/update' && request.method === 'POST') {
-			this.addLog('Update request received');
-
 			const token = request.headers.get('X-Control-Token');
 			if (token !== this.env.UPDATE_SECRET) {
 				return new Response(null, { status: 403, headers: { ...corsHeaders } });
@@ -185,7 +178,7 @@ export class LiveStatusDO {
 			const upgrade = request.headers.get('Upgrade')?.toLowerCase();
 			if (upgrade === 'websocket') {
 				const [client, server] = Object.values(new WebSocketPair());
-				await server.accept();
+				server.accept();
 				this.clients.add(server);
 				server.addEventListener('close', () => this.clients.delete(server));
 
@@ -206,11 +199,15 @@ export class LiveStatusDO {
 		// 5) Backup /status route
 		//
 		if (path === '/status' && request.method === 'GET') {
-			this.addLog('Status requested');
-
+			const expires = await this.state.storage.get('pshbExpires');
 			const videoId = await this.state.storage.get('videoId');
+
+			const headers = new Headers({ 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120', ...corsHeaders });
+			if (expires !== undefined) {
+				headers.set('x-pshb-expires', String(expires));
+			}
 			return new Response(JSON.stringify({ live: !!videoId, videoId }), {
-				headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age: 120', ...corsHeaders },
+				headers,
 			});
 		}
 
@@ -218,8 +215,6 @@ export class LiveStatusDO {
 		// 6) Flush & re-search API
 		//
 		if (path === '/flush' && request.method === 'POST') {
-			this.addLog('Flush request received');
-
 			const now = Date.now();
 			const COOLDOWN = 30 * 60 * 1000; // 30 minutes
 			const lastFlush = (await this.state.storage.get<number>('lastFlush')) ?? 0;
@@ -290,7 +285,6 @@ export class LiveStatusDO {
 		}
 
 		// Default response for unknown routes
-		this.addLog(`Unknown route accessed: ${path}`);
 		return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { ...corsHeaders } });
 	}
 }
@@ -313,7 +307,59 @@ export default {
 	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
 		const id = env.LIVE_DO.idFromName('singleton');
 		const stub = env.LIVE_DO.get(id);
+
 		const statusRes = await stub.fetch('/api/uptime/status');
+		if (!statusRes.ok) {
+			console.error('Status fetch failed: ', statusRes.status);
+			return;
+		}
+
+		const expiryHeader = statusRes.headers.get('x-pshb-expires');
+		let expires: Date | null = null;
+		if (expiryHeader) {
+			const expireAt = Number(expiryHeader);
+			if (!Number.isNaN(expireAt)) {
+				expires = new Date(expireAt);
+				console.log("PSHB sub expires at", expires)
+			} else {
+				console.warn("PSHB header is invalid, header: ", expiryHeader)
+			}
+		} else {
+			console.error("No PSHB header returned.")
+		}
+
+		const now = Date.now()
+
+		const leaseSec = Number(env.PSHB_LEASE_SECONDS || "432000");
+		const renewWindow = (leaseSec * 1000) * 0.10;
+
+		// @ts-ignore
+		if (expires && expires - now < renewWindow) {
+			const form = new URLSearchParams({
+				"hub.mode": "subscribe",
+				"hub.topic": "https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC2I6ta1bWX7DnEuYNvHiptQ",
+				"hub.callback": "https://swarm-fm-uptime-worker.ktrain5169.workers.dev/webhook",
+				"hub.verify": "async",
+				"hub.verify_token": env.VERIFY_TOKEN,
+				"hub.secret": env.WEBHOOK_SECRET,
+				"hub.lease_seconds": leaseSec.toString()
+			})
+
+			stub.fetch("https://pubsubhubbub.appspot.com/subscribe", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-www-form-urlencoded" },
+				body: form.toString()
+			}).then(async res => {
+				if (res.ok) {
+					console.log("PSHB sub renewed")
+				} else {
+					console.error("PSHB sub renew failed: ", res.status)
+				}
+			}).catch(err => {
+				console.error("PSHB renew error: ", err)
+			})
+		}
+
 		const { videoId } = (await statusRes.json()) as { videoId: string | null };
 
 		if (!videoId) return;

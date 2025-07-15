@@ -16,8 +16,8 @@ if (!WEBHOOK_SECRET) {
 
 // Get the XML file path from command line arguments
 if (process.argv.length < 3) {
-	console.error('Usage: tsx ./utils/signature-compute.mts <XML_FILE_PATH>');
-	console.error('Example: tsx ./utils/signature-compute.mts test-post-notification.xml');
+	console.error('Usage: tsx ./utils/signature-compute.ts <XML_FILE_PATH>');
+	console.error('Example: tsx ./utils/signature-compute.ts test-post-notification.xml');
 	process.exit(1);
 }
 
@@ -26,7 +26,7 @@ const xmlFilePath = process.argv[2];
 // Detect if output is being piped or redirected
 const isCliMode = !process.stdout.isTTY;
 
-function computeSignature(secret: string, payload: string): string {
+export function computeSignature(secret: string, payload: string): string {
 	const hmac = createHmac('sha256', secret);
 	hmac.update(payload);
 	return 'sha256=' + hmac.digest('hex');
