@@ -15,6 +15,8 @@ interface Env {
 	PSHB_LEASE_SECONDS?: string;
 }
 
+const baseWorkerUrl = "https://swarm-fm-uptime-worker.ktrain5169.workers.dev"
+
 export class LiveStatusDO {
 	private state: DurableObjectState;
 	private env: Env;
@@ -308,7 +310,7 @@ export default {
 		const id = env.LIVE_DO.idFromName('singleton');
 		const stub = env.LIVE_DO.get(id);
 
-		const statusRes = await stub.fetch('/api/uptime/status');
+		const statusRes = await stub.fetch(baseWorkerUrl + '/api/uptime/status');
 		if (!statusRes.ok) {
 			console.error('Status fetch failed: ', statusRes.status);
 			return;
@@ -390,7 +392,7 @@ export default {
 
 		const hasEnded = !details || !!details.actualEndTime;
 		if (hasEnded) {
-			await stub.fetch('/api/uptime/update', {
+			await stub.fetch(baseWorkerUrl + '/api/uptime/update', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', 'X-Control-Token': env.UPDATE_SECRET },
 				body: JSON.stringify({ videoId: null }),
