@@ -1,3 +1,5 @@
+/// <reference path="../worker-configuration.d.ts" />
+
 import { XMLParser } from 'fast-xml-parser';
 
 const corsHeaders: { [key: string]: string } = {
@@ -5,16 +7,6 @@ const corsHeaders: { [key: string]: string } = {
 	'Access-Control-Allow-Methods': 'GET, POST',
 	'Access-Control-Allow-Headers': 'Content-Type',
 };
-
-interface Env {
-	LIVE_DO: DurableObjectNamespace;
-	UPDATE_SECRET: string;
-	WEBHOOK_SECRET: string;
-	VERIFY_TOKEN: string;
-	YT_API_KEY: string;
-	PSHB_LEASE_SECONDS?: string;
-}
-
 const baseWorkerUrl = "https://uptime.sw.arm.fm/"
 
 export class LiveStatusDO {
@@ -361,6 +353,8 @@ export default {
 				console.error("PSHB renew error: ", err)
 			})
 		}
+
+		if (!env.ENABLE_SCHEDULED || env.ENABLE_SCHEDULED !== "true") return;
 
 		const { videoId } = (await statusRes.json()) as { videoId: string | null };
 
