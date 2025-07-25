@@ -1,4 +1,4 @@
-name = "swarm-fm-uptime-worker"
+name = "sfm-uptime-tracker"
 main = "src/index.ts"
 compatibility_date = "2025-04-25"
 
