@@ -15,7 +15,7 @@ interface Env {
 	PSHB_LEASE_SECONDS?: string;
 }
 
-const baseWorkerUrl = "https://swarm-fm-uptime-worker.ktrain5169.workers.dev"
+const baseWorkerUrl = "https://uptime.sw.arm.fm/"
 
 export class LiveStatusDO {
 	private state: DurableObjectState;
