@@ -7,7 +7,7 @@ const corsHeaders: { [key: string]: string } = {
 	'Access-Control-Allow-Methods': 'GET, POST',
 	'Access-Control-Allow-Headers': 'Content-Type',
 };
-const baseWorkerUrl = "https://uptime.sw.arm.fm/"
+const baseWorkerUrl = "https://uptime.sw.arm.fm"
 
 export class LiveStatusDO {
 	private state: DurableObjectState;
