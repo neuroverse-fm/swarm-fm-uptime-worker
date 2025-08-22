@@ -139,7 +139,7 @@ async function handleFetch(request: Request, env: Env, _ctx: ExecutionContext): 
   }
 
   // Short-hand to access the KV (bracket notation to allow hyphens in binding name)
-  const KV = (env as any)['SwarmFM-LiveStatusKV'] as KVNamespace;
+  const KV = env['SwarmFM-LiveStatusKV'] as KVNamespace;
 
   // 1) PSHB handshake (GET /webhook)
   if (path === '/webhook' && request.method === 'GET') {
