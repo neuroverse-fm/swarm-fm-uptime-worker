@@ -13,3 +13,8 @@ crons = ["*/3 * * * *"]
 
 [observability.logs]
 enabled = true
+
+# add a new migration (tag must be unique)
+[[migrations]]
+tag = "delete-live-status-do-2025-08-22"
+deleted_classes = ["LiveStatusDO"]
