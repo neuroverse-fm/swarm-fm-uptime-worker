@@ -6,7 +6,7 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"prepare": "wrangler types",
+		"cf-typegen": "wrangler types",
 		"style": "prettier --write ."
 	},
 	"devDependencies": {
