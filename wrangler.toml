@@ -1,12 +1,6 @@
 name = "sfm-uptime-tracker"
 main = "src/index.ts"
-compatibility_date = "2025-04-25"
-
-# Durable Objects
-[durable_objects]
-bindings = [
-  { name = "LIVE_DO", class_name = "LiveStatusDO" }
-]
+compatibility_date = "2025-08-22"
 
 # Workers KV namespace
 [[kv_namespaces]]
@@ -16,10 +10,6 @@ id = "78006c3e99114591a314c0c8245229bc"
 [triggers]
 # Define cron schedules for triggering the worker
 crons = ["*/3 * * * *"]
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = [ "LiveStatusDO" ]
 
 [observability.logs]
 enabled = true
