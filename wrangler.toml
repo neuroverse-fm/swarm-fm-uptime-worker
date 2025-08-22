@@ -8,6 +8,11 @@ bindings = [
   { name = "LIVE_DO", class_name = "LiveStatusDO" }
 ]
 
+# Workers KV namespace
+[[kv_namespaces]]
+binding = "SwarmFM-LiveStatusKV"
+id = "78006c3e99114591a314c0c8245229bc"
+
 [triggers]
 # Define cron schedules for triggering the worker
 crons = ["*/3 * * * *"]
