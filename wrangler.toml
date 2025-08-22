@@ -1,5 +1,5 @@
 name = "sfm-uptime-tracker"
-main = "src/index.ts"
+main = "src/worker.ts"
 compatibility_date = "2025-08-22"
 
 # Workers KV namespace
