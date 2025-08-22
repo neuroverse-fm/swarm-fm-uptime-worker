@@ -4,7 +4,7 @@ compatibility_date = "2025-08-22"
 
 # Workers KV namespace
 [[kv_namespaces]]
-binding = "SwarmFM-LiveStatusKV"
+binding = "SwarmFM_LiveStatusKV"
 id = "78006c3e99114591a314c0c8245229bc"
 
 [triggers]

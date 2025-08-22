@@ -9,11 +9,6 @@ const corsHeaders: Record<string, string> = {
 };
 const baseWorkerUrl = 'https://sw.arm.fm'; // used by scheduled handler to check status
 
-// NOTE: KV binding name contains hyphens, so we access it with bracket notation from `env`:
-// (env as any)['SwarmFM-LiveStatusKV']
-// If you prefer a hyphen-free binding (recommended for tooling), bind e.g. SwarmFM_LiveStatusKV
-// and use env.SwarmFM_LiveStatusKV instead.
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
@@ -101,7 +96,7 @@ export default {
       const hasEnded = !details || !!details.actualEndTime;
       if (hasEnded) {
         // clear videoId in KV
-        const KV = (env as any)['SwarmFM-LiveStatusKV'] as KVNamespace;
+        const KV = env.SwarmFM_LiveStatusKV;
         await KV.delete('videoId');
         console.log('Cleared videoId from KV because stream ended.');
       }
@@ -139,7 +134,7 @@ async function handleFetch(request: Request, env: Env, _ctx: ExecutionContext): 
   }
 
   // Short-hand to access the KV (bracket notation to allow hyphens in binding name)
-  const KV = env['SwarmFM-LiveStatusKV'] as KVNamespace;
+  const KV = env.SwarmFM_LiveStatusKV;
 
   // 1) PSHB handshake (GET /webhook)
   if (path === '/webhook' && request.method === 'GET') {
